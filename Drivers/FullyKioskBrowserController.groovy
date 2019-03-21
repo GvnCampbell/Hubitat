@@ -1,11 +1,18 @@
+// VERSION: 1.01
+
 metadata {
-    definition (name: "Fully Kiosk Browser Controller", namespace: "GvnCampbell", author: "Gavin Campbell") {
+    definition (name: "Fully Kiosk Browser Controller", namespace: "GvnCampbell", author: "Gavin Campbell", importUrl: "https://raw.githubusercontent.com/GvnCampbell/Hubitat/daa5b01bb4b293b1422a570aca55d1867b4d6777/Drivers/FullyKioskBrowserController.groovy") {
 		capability "Tone"
 		capability "SpeechSynthesis"
 		capability "AudioVolume"
         capability "Refresh"
 		command "launchAppPackage"
 		command "bringFullyToFront"
+		command "screenOn"
+		command "screenOff"
+		command "triggerMotion"
+		command "startScreensaver"
+		command "stopScreensaver"
     }
 	preferences {
 		input(name:"serverIP",type:"string",title:"Server IP Address",defaultValue:"",required:true)
@@ -48,6 +55,31 @@ def bringFullyToFront() {
 	def logprefix = "[bringFullyToFront] "
     logger(logprefix,"trace")
 	sendCommandPost("cmd=toForeground")
+}
+def screenOn() {
+	def logprefix = "[screenOn] "
+    logger(logprefix,"trace")
+	sendCommandPost("cmd=screenOn")
+}
+def screenOff() {
+	def logprefix = "[screenOff] "
+    logger(logprefix,"trace")
+	sendCommandPost("cmd=screenOff")
+}
+def triggerMotion() {
+	def logprefix = "[triggerMotion] "
+    logger(logprefix,"trace")
+	sendCommandPost("cmd=triggerMotion")
+}
+def startScreensaver() {
+	def logprefix = "[startScreensaver] "
+    logger(logprefix,"trace")
+	sendCommandPost("cmd=startScreensaver")
+}
+def stopScreensaver() {
+	def logprefix = "[stopScreensaver] "
+    logger(logprefix,"trace")
+	sendCommandPost("cmd=stopScreensaver")
 }
 def speak(text) {
 	def logprefix = "[speak] "
