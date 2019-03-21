@@ -1,7 +1,7 @@
-// VERSION: 1.01
+// VERSION: 1.02
 
 metadata {
-    definition (name: "Fully Kiosk Browser Controller", namespace: "GvnCampbell", author: "Gavin Campbell", importUrl: "https://raw.githubusercontent.com/GvnCampbell/Hubitat/daa5b01bb4b293b1422a570aca55d1867b4d6777/Drivers/FullyKioskBrowserController.groovy") {
+    definition (name: "Fully Kiosk Browser Controller", namespace: "GvnCampbell", author: "Gavin Campbell", importUrl: "https://github.com/GvnCampbell/Hubitat/blob/master/Drivers/FullyKioskBrowserController.groovy") {
 		capability "Tone"
 		capability "SpeechSynthesis"
 		capability "AudioVolume"
