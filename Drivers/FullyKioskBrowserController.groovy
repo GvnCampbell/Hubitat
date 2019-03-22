@@ -1,4 +1,4 @@
-// VERSION: 1.03
+// VERSION: 1.04
 
 metadata {
     definition (name: "Fully Kiosk Browser Controller", namespace: "GvnCampbell", author: "Gavin Campbell", importUrl: "https://github.com/GvnCampbell/Hubitat/blob/master/Drivers/FullyKioskBrowserController.groovy") {
@@ -14,6 +14,8 @@ metadata {
 		command "triggerMotion"
 		command "startScreensaver"
 		command "stopScreensaver"
+		command "loadURL",["String"]
+		command "loadStartURL"
     }
 	preferences {
 		input(name:"serverIP",type:"string",title:"Server IP Address",defaultValue:"",required:true)
@@ -81,6 +83,16 @@ def stopScreensaver() {
 	def logprefix = "[stopScreensaver] "
     logger(logprefix,"trace")
 	sendCommandPost("cmd=stopScreensaver")
+}
+def loadURL(url) {
+	def logprefix = "[loadURL] "
+	logger(logprefix+"url:${url}","trace")
+	sendCommandPost("cmd=loadURL&url=${url}")
+}
+def loadStartURL() {
+	def logprefix = "[loadStartURL] "
+	logger(logprefix,"trace")
+	sendCommandPost("cmd=loadStartURL")
 }
 def speak(text) {
 	def logprefix = "[speak] "
