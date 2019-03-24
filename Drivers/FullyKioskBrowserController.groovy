@@ -1,4 +1,4 @@
-// VERSION: 1.04
+// VERSION: 1.05
 
 metadata {
     definition (name: "Fully Kiosk Browser Controller", namespace: "GvnCampbell", author: "Gavin Campbell", importUrl: "https://github.com/GvnCampbell/Hubitat/blob/master/Drivers/FullyKioskBrowserController.groovy") {
@@ -16,6 +16,7 @@ metadata {
 		command "stopScreensaver"
 		command "loadURL",["String"]
 		command "loadStartURL"
+		command "setScreenBrightness",["Number"]
     }
 	preferences {
 		input(name:"serverIP",type:"string",title:"Server IP Address",defaultValue:"",required:true)
@@ -68,6 +69,11 @@ def screenOff() {
 	def logprefix = "[screenOff] "
     logger(logprefix,"trace")
 	sendCommandPost("cmd=screenOff")
+}
+def setScreenBrightness(value) {
+	def logprefix = "[setScreenBrightness] "
+	logger(logprefix+"value:${value}","trace")
+	sendCommandPost("cmd=setStringSetting&key=screenBrightness&value=${value}")
 }
 def triggerMotion() {
 	def logprefix = "[triggerMotion] "
