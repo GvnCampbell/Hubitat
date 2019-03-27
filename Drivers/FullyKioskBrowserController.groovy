@@ -1,29 +1,31 @@
-// VERSION: 1.05
-
 metadata {
     definition (name: "Fully Kiosk Browser Controller", namespace: "GvnCampbell", author: "Gavin Campbell", importUrl: "https://github.com/GvnCampbell/Hubitat/blob/master/Drivers/FullyKioskBrowserController.groovy") {
-		capability "Tone"
-		capability "SpeechSynthesis"
-		capability "AudioVolume"
-        capability "Refresh"
 		capability "Actuator"
-		command "launchAppPackage"
+		capability "Alarm"
+		capability "AudioVolume"
+		capability "Refresh"
+		capability "SpeechSynthesis"
+		capability "Tone"
 		command "bringFullyToFront"
+		command "launchAppPackage"
+		command "loadStartURL"
+		command "loadURL",["String"]
 		command "screenOn"
 		command "screenOff"
-		command "triggerMotion"
+		command "setScreenBrightness",["Number"]
 		command "startScreensaver"
 		command "stopScreensaver"
-		command "loadURL",["String"]
-		command "loadStartURL"
-		command "setScreenBrightness",["Number"]
+		command "triggerMotion"
     }
 	preferences {
 		input(name:"serverIP",type:"string",title:"Server IP Address",defaultValue:"",required:true)
 		input(name:"serverPort",type:"string",title:"Server Port",defaultValue:"2323",required:true)
 		input(name:"serverPassword",type:"string",title:"Server Password",defaultValue:"",required:true)
 		input(name:"toneFile",type:"string",title:"Tone Audio File URL",defaultValue:"",required:false)
+		input(name:"sirenFile",type:"string",title:"Siren Audio File URL",defaultValue:"",required:false)
+		input(name:"sirenVolume",type:"integer",title:"Siren Volume",range:[0..100],defaultValue:"100",required:false)
 		input(name:"appPackage",type:"string",title:"Application to Launch",defaultValue:"",required:false)
+		input(name:"volumeStream",type:"integer",title:"Volume Stream",range:[0..10],defaultValue:3,required:true)
 		input(name:"loggingLevel",type:"enum",title:"Logging Level",description:"Set the level of logging.",options:["none","debug","trace","info","warn","error"],defaultValue:"debug",required:true)
     }
 }
@@ -108,43 +110,106 @@ def speak(text) {
 def setVolume(volumeLevel) {
 	def logprefix = "[setVolume] "
 	logger(logprefix+"volumeLevel:${volumeLevel}")
-	for (i=1;i<=10;i++) {
-		sendCommandPost("cmd=setAudioVolume&level=${volumeLevel}&stream=${i}")
+	logger(logprefix+"volumeStream:${volumeStream}")
+	def vl = volumeLevel.toInteger()
+	def vs = volumeStream.toInteger()
+	if (vl >= 0 && vl <= 100 && vs >= 0 && vs <= 10) {
+		sendCommandPost("cmd=setAudioVolume&level=${vl}&stream=${vs}")
+		sendEvent([name:"volume",value:vl])
+		state.remove("mute")
+	} else {
+		logger(logprefix+"volumeLevel or volumeStream out of range.")
 	}
-	sendEvent([name:"volume",value:volumeLevel])
 }
 def volumeUp() {
 	def logprefix = "[volumeUp] "
 	logger(logprefix)
-	def newVolume = device.currentValue("volume")
+	def newVolume = state.mute ?: device.currentValue("volume")
 	if (newVolume) {
 		newVolume = newVolume.toInteger() + 10
 		newVolume = Math.min(newVolume,100)
 		setVolume(newVolume)
+	} else {
+		logger(logprefix+"No volume currently set.")
 	}
 }
 def volumeDown() {
 	def logprefix = "[volumeDown] "
 	logger(logprefix)
-	def newVolume = device.currentValue("volume")
+	def newVolume = state.mute ?: device.currentValue("volume")
 	if (newVolume) {
 		newVolume = newVolume.toInteger() - 10
 		newVolume = Math.max(newVolume,0)
 		setVolume(newVolume)
+	} else {
+		logger(logprefix+"No volume currently set.")
 	}
 }
 def mute() {
 	def logprefix = "[mute] "
 	logger(logprefix)
+	if (!state.mute) {
+		setVolume(0)
+		state.mute = device.currentValue("volume") ?: 100
+		logger(logprefix+"Previous volume saved to state.mute:${state.mute}")
+	} else {
+		logger(logprefix+"Already muted.")
+	}
 }
 def unmute() {
 	def logprefix = "[unmute] "
-	logger(logprefix)
+	logger(logprefix+state.mute)
+	if (state.mute) {
+		setVolume(state.mute)
+	} else {
+		logger(logprefix+"Not muted.")
+	}
 }
 def refresh() {
   	def logprefix = "[refresh] "
   	logger logprefix
 	sendCommandPost("cmd=deviceInfo")
+}
+def both() {
+	def logprefix = "[both] "
+	logger(logprefix)
+	sirenStart("both")
+}
+def strobe() {
+	def logprefix = "[strobe] "
+	logger(logprefix)
+	sirenStart("strobe")
+}
+def siren() {
+	def logprefix = "[siren] "
+	logger(logprefix)
+	sirenStart("siren")
+}
+def sirenStart(eventValue) {
+	def logprefix = "[sirenStart] "
+	logger(logprefix+"sirenFile:${sirenFile}")
+	logger(logprefix+"sirenVolume:${sirenVolume}")
+	logger(logprefix+"eventValue:${eventValue}")
+	if (sirenVolume && sirenFile && eventValue) {
+		state.siren = state.mute ?: (device.currentValue("volume") ?: 100)
+		logger(logprefix+"Previous volume saved to state.siren:${state.siren}")
+		unmute()
+		setVolume(sirenVolume)
+		sendEvent([name:"alarm",value:eventValue])
+		sendCommandPost("cmd=playSound&loop=true&url=${sirenFile}")
+	} else {
+		logger(logprefix+"sirenFile,sirenVolume or eventValue not set.")
+	}
+}
+def off() {
+	def logprefix = "[off] "
+	logger(logprefix+"state.siren:${state.siren}")
+	if (state.siren) {
+		setVolume(state.siren)
+	}
+	state.remove("siren")
+	sendEvent([name:"alarm",value:"off"])
+	sendCommandPost("cmd=stopSound")
 }
 
 // *** [ Communication Methods ] **********************************************
@@ -163,10 +228,10 @@ def sendCommandCallback(response, data) {
 	def logprefix = "[sendCommandCallback] "
     logger(logprefix+"response.status: ${response.status}","trace")
 	if (response?.status == 200) {
-		logger(logprefix+"response.data: ${response.data}","trace")
+		logger(logprefix+"response.data: ${response.data}")
 		def jsonData = parseJson(response.data)
 		if (jsonData?.ip4 || jsonData?.status == "OK") {
-			logger(logprefix+"Updating last activity.","trace")
+			logger(logprefix+"Updating last activity.")
 			sendEvent([name:"refresh"])
 		}
 	}
