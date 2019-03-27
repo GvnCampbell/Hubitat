@@ -25,9 +25,9 @@ metadata {
 		input(name:"serverPassword",type:"string",title:"Server Password",defaultValue:"",required:true)
 		input(name:"toneFile",type:"string",title:"Tone Audio File URL",defaultValue:"",required:false)
 		input(name:"sirenFile",type:"string",title:"Siren Audio File URL",defaultValue:"",required:false)
-		input(name:"sirenVolume",type:"integer",title:"Siren Volume",range:[0..100],defaultValue:"100",required:false)
+		input(name:"sirenVolume",type:"integer",title:"Siren Volume (0-100)",range:[0..100],defaultValue:"100",required:false)
 		input(name:"appPackage",type:"string",title:"Application to Launch",defaultValue:"",required:false)
-		input(name:"volumeStream",type:"integer",title:"Volume Stream",range:[0..10],defaultValue:3,required:true)
+		input(name:"volumeStream",type:"integer",title:"Volume Stream (0-10)",range:[0..10],defaultValue:3,required:true)
 		input(name:"loggingLevel",type:"enum",title:"Logging Level",description:"Set the level of logging.",options:["none","debug","trace","info","warn","error"],defaultValue:"debug",required:true)
     }
 }
