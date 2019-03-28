@@ -1,4 +1,4 @@
-// VERSION: 1.07
+// VERSION: 1.08
 
 metadata {
     definition (name: "Fully Kiosk Browser Controller", namespace: "GvnCampbell", author: "Gavin Campbell", importUrl: "https://github.com/GvnCampbell/Hubitat/blob/master/Drivers/FullyKioskBrowserController.groovy") {
@@ -28,7 +28,7 @@ metadata {
 		input(name:"sirenVolume",type:"integer",title:"Siren Volume (0-100)",range:[0..100],defaultValue:"100",required:false)
 		input(name:"volumeStream",type:"enum",title:"Volume Stream",
 			  options:["0":"Voice Call","1":"System","2":"Ring","3":"Music","4":"Alarm","5":"Notification","6":"Bluetooth","7":"System Enforced","8":"DTMF","9":"TTS","10":"Accessibility"],
-			  defaultValue:["3"],required:true,multiple:true)
+			  defaultValue:["3"],required:true,multiple:false)
 		input(name:"loggingLevel",type:"enum",title:"Logging Level",description:"Set the level of logging.",options:["none","debug","trace","info","warn","error"],defaultValue:"debug",required:true)
     }
 }
@@ -115,11 +115,9 @@ def setVolume(volumeLevel) {
 	logger(logprefix+"volumeLevel:${volumeLevel}")
 	logger(logprefix+"volumeStream:${volumeStream}")
 	def vl = volumeLevel.toInteger()
-	def vs = volumeStream
+	def vs = volumeStream.toInteger()
 	if (vl >= 0 && vl <= 100 && vs) {
-		vs.each {
-			sendCommandPost("cmd=setAudioVolume&level=${vl}&stream=${it}")
-		}
+		sendCommandPost("cmd=setAudioVolume&level=${vl}&stream=${vs}")
 		sendEvent([name:"volume",value:vl])
 		state.remove("mute")
 	} else {
