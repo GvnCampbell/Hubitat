@@ -1,4 +1,4 @@
-// VERSION: 1.06
+// VERSION: 1.07
 
 metadata {
     definition (name: "Fully Kiosk Browser Controller", namespace: "GvnCampbell", author: "Gavin Campbell", importUrl: "https://github.com/GvnCampbell/Hubitat/blob/master/Drivers/FullyKioskBrowserController.groovy") {
@@ -9,7 +9,7 @@ metadata {
 		capability "SpeechSynthesis"
 		capability "Tone"
 		command "bringFullyToFront"
-		command "launchAppPackage"
+		command "launchAppPackage",["String"]
 		command "loadStartURL"
 		command "loadURL",["String"]
 		command "screenOn"
@@ -26,8 +26,9 @@ metadata {
 		input(name:"toneFile",type:"string",title:"Tone Audio File URL",defaultValue:"",required:false)
 		input(name:"sirenFile",type:"string",title:"Siren Audio File URL",defaultValue:"",required:false)
 		input(name:"sirenVolume",type:"integer",title:"Siren Volume (0-100)",range:[0..100],defaultValue:"100",required:false)
-		input(name:"appPackage",type:"string",title:"Application to Launch",defaultValue:"",required:false)
-		input(name:"volumeStream",type:"integer",title:"Volume Stream (0-10)",range:[0..10],defaultValue:3,required:true)
+		input(name:"volumeStream",type:"enum",title:"Volume Stream",
+			  options:["0":"Voice Call","1":"System","2":"Ring","3":"Music","4":"Alarm","5":"Notification","6":"Bluetooth","7":"System Enforced","8":"DTMF","9":"TTS","10":"Accessibility"],
+			  defaultValue:["3"],required:true,multiple:true)
 		input(name:"loggingLevel",type:"enum",title:"Logging Level",description:"Set the level of logging.",options:["none","debug","trace","info","warn","error"],defaultValue:"debug",required:true)
     }
 }
@@ -35,17 +36,17 @@ metadata {
 // *** [ Initialization Methods ] *********************************************
 def installed() {
 	def logprefix = "[installed] "
-    logger logprefix
+    logger(logprefix,"trace!")
     initialize()
 }
 def updated() {
 	def logprefix = "[updated] "
-    logger logprefix
+	logger(logprefix,"trace!")
 	initialize()
 }
 def initialize() {
 	def logprefix = "[initialize] "
-    logger logprefix
+    logger(logprefix,"trace!")
 }
 
 // *** [ Device Methods ] *****************************************************
@@ -54,7 +55,7 @@ def beep() {
     logger(logprefix,"trace")
 	sendCommandPost("cmd=playSound&url=${toneFile}")
 }
-def launchAppPackage() {
+def launchAppPackage(appPackage) {
 	def logprefix = "[launchAppPackage] "
     logger(logprefix,"trace")
 	sendCommandPost("cmd=startApplication&package=${appPackage}")
@@ -114,9 +115,11 @@ def setVolume(volumeLevel) {
 	logger(logprefix+"volumeLevel:${volumeLevel}")
 	logger(logprefix+"volumeStream:${volumeStream}")
 	def vl = volumeLevel.toInteger()
-	def vs = volumeStream.toInteger()
-	if (vl >= 0 && vl <= 100 && vs >= 0 && vs <= 10) {
-		sendCommandPost("cmd=setAudioVolume&level=${vl}&stream=${vs}")
+	def vs = volumeStream
+	if (vl >= 0 && vl <= 100 && vs) {
+		vs.each {
+			sendCommandPost("cmd=setAudioVolume&level=${vl}&stream=${it}")
+		}
 		sendEvent([name:"volume",value:vl])
 		state.remove("mute")
 	} else {
