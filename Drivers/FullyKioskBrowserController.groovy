@@ -1,4 +1,4 @@
-// VERSION: 1.08
+// VERSION: 1.09
 
 metadata {
     definition (name: "Fully Kiosk Browser Controller", namespace: "GvnCampbell", author: "Gavin Campbell", importUrl: "https://github.com/GvnCampbell/Hubitat/blob/master/Drivers/FullyKioskBrowserController.groovy") {
@@ -12,11 +12,13 @@ metadata {
 		command "launchAppPackage",["String"]
 		command "loadStartURL"
 		command "loadURL",["String"]
+		command "playSound",["String"]
 		command "screenOn"
 		command "screenOff"
 		command "setScreenBrightness",["Number"]
 		command "startScreensaver"
 		command "stopScreensaver"
+		command "stopSound"
 		command "triggerMotion"
     }
 	preferences {
@@ -27,8 +29,8 @@ metadata {
 		input(name:"sirenFile",type:"string",title:"Siren Audio File URL",defaultValue:"",required:false)
 		input(name:"sirenVolume",type:"integer",title:"Siren Volume (0-100)",range:[0..100],defaultValue:"100",required:false)
 		input(name:"volumeStream",type:"enum",title:"Volume Stream",
-			  options:["0":"Voice Call","1":"System","2":"Ring","3":"Music","4":"Alarm","5":"Notification","6":"Bluetooth","7":"System Enforced","8":"DTMF","9":"TTS","10":"Accessibility"],
-			  defaultValue:["3"],required:true,multiple:false)
+			  options:["1":"System","2":"Ring","3":"Music","4":"Alarm","5":"Notification","6":"Bluetooth","7":"System Enforced","8":"DTMF","9":"TTS","10":"Accessibility"],
+			  defaultValue:["3"],required:true,multiple:false) // when supported by HE we will set multiple to true
 		input(name:"loggingLevel",type:"enum",title:"Logging Level",description:"Set the level of logging.",options:["none","debug","trace","info","warn","error"],defaultValue:"debug",required:true)
     }
 }
@@ -37,6 +39,9 @@ metadata {
 def installed() {
 	def logprefix = "[installed] "
     logger(logprefix,"trace!")
+	sendEvent([name:"mute",value:"unmuted"])
+	sendEvent([name:"alarm",value:"off"])
+	sendEvent([name:"volume",value:100])
     initialize()
 }
 def updated() {
@@ -116,10 +121,11 @@ def setVolume(volumeLevel) {
 	logger(logprefix+"volumeStream:${volumeStream}")
 	def vl = volumeLevel.toInteger()
 	def vs = volumeStream.toInteger()
-	if (vl >= 0 && vl <= 100 && vs) {
+	if (vl >= 0 && vl <= 100 && vs >= 1 && vs <= 10) {
 		sendCommandPost("cmd=setAudioVolume&level=${vl}&stream=${vs}")
 		sendEvent([name:"volume",value:vl])
 		state.remove("mute")
+		sendEvent([name:"mute",value:"unmuted"])
 	} else {
 		logger(logprefix+"volumeLevel or volumeStream out of range.")
 	}
@@ -154,6 +160,7 @@ def mute() {
 	if (!state.mute) {
 		setVolume(0)
 		state.mute = device.currentValue("volume") ?: 100
+		sendEvent([name:"mute",value:"muted"])
 		logger(logprefix+"Previous volume saved to state.mute:${state.mute}")
 	} else {
 		logger(logprefix+"Already muted.")
@@ -212,6 +219,16 @@ def off() {
 	}
 	state.remove("siren")
 	sendEvent([name:"alarm",value:"off"])
+	sendCommandPost("cmd=stopSound")
+}
+def playSound(soundFile) {
+	def logprefix = "[playSound] "
+	logger(logprefix+"soundFile:${soundFile}","trace")
+	sendCommandPost("cmd=playSound&url=${soundFile}")
+}
+def stopSound() {
+	def logprefix = "[stopSound] "
+    logger(logprefix,"trace")
 	sendCommandPost("cmd=stopSound")
 }
 
