@@ -113,7 +113,11 @@ def loadStartURL() {
 def speak(text) {
 	def logprefix = "[speak] "
 	logger(logprefix+"text:${text}","trace")
-	sendCommandPost("cmd=textToSpeech&text=${java.net.URLEncoder.encode(text, "UTF-8")}")
+	def sound = textToSpeech(text)
+	logger(logprefix+"sound.uri: ${sound.uri}")
+	logger(logprefix+"sound.duration: ${sound.duration}")
+	playSound(sound.uri)
+	//sendCommandPost("cmd=textToSpeech&text=${java.net.URLEncoder.encode(text, "UTF-8")}")
 }
 def setVolume(volumeLevel) {
 	def logprefix = "[setVolume] "
