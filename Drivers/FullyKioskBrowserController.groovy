@@ -1,4 +1,4 @@
-// VERSION: 1.10
+// VERSION: 1.20
 
 metadata {
     definition (name: "Fully Kiosk Browser Controller", namespace: "GvnCampbell", author: "Gavin Campbell", importUrl: "https://github.com/GvnCampbell/Hubitat/blob/master/Drivers/FullyKioskBrowserController.groovy") {
