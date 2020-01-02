@@ -1,4 +1,4 @@
-// VERSION: 1.21
+// VERSION: 1.22
 
 metadata {
     definition (name: "Fully Kiosk Browser Controller", namespace: "GvnCampbell", author: "Gavin Campbell", importUrl: "https://raw.githubusercontent.com/GvnCampbell/Hubitat/master/Drivers/FullyKioskBrowserController.groovy") {
@@ -58,12 +58,12 @@ def initialize() {
 def beep() {
 	def logprefix = "[beep] "
     logger(logprefix,"trace")
-	sendCommandPost("cmd=playSound&url=${toneFile}")
+	sendCommandPost("cmd=playSound&url=${java.net.URLEncoder.encode(toneFile, "UTF-8")}")
 }
 def launchAppPackage(appPackage) {
 	def logprefix = "[launchAppPackage] "
     logger(logprefix,"trace")
-	sendCommandPost("cmd=startApplication&package=${appPackage}")
+	sendCommandPost("cmd=startApplication&package=${java.net.URLEncoder.encode(appPackage, "UTF-8")}")
 }
 def bringFullyToFront() {
 	def logprefix = "[bringFullyToFront] "
@@ -103,7 +103,7 @@ def stopScreensaver() {
 def loadURL(url) {
 	def logprefix = "[loadURL] "
 	logger(logprefix+"url:${url}","trace")
-	sendCommandPost("cmd=loadURL&url=${url}")
+	sendCommandPost("cmd=loadURL&url=${java.net.URLEncoder.encode(url, "UTF-8")}")
 }
 def loadStartURL() {
 	def logprefix = "[loadStartURL] "
@@ -117,7 +117,6 @@ def speak(text) {
 	logger(logprefix+"sound.uri: ${sound.uri}")
 	logger(logprefix+"sound.duration: ${sound.duration}")
 	playSound(sound.uri)
-	//sendCommandPost("cmd=textToSpeech&text=${java.net.URLEncoder.encode(text, "UTF-8")}")
 }
 def setVolume(volumeLevel) {
 	def logprefix = "[setVolume] "
@@ -210,7 +209,7 @@ def sirenStart(eventValue) {
 		unmute()
 		setVolume(sirenVolume)
 		sendEvent([name:"alarm",value:eventValue])
-		sendCommandPost("cmd=playSound&loop=true&url=${sirenFile}")
+		sendCommandPost("cmd=playSound&loop=true&url=${java.net.URLEncoder.encode(sirenFile, "UTF-8")}")
 	} else {
 		logger(logprefix+"sirenFile,sirenVolume or eventValue not set.")
 	}
@@ -228,7 +227,7 @@ def off() {
 def playSound(soundFile) {
 	def logprefix = "[playSound] "
 	logger(logprefix+"soundFile:${soundFile}","trace")
-	sendCommandPost("cmd=playSound&url=${soundFile}")
+	sendCommandPost("cmd=playSound&url=${java.net.URLEncoder.encode(soundFile, "UTF-8")}")
 }
 def stopSound() {
 	def logprefix = "[stopSound] "
