@@ -1,4 +1,20 @@
-// VERSION: 1.22
+// Fully Kiosk Browser Driver 1.24
+// Github: https://github.com/GvnCampbell/Hubitat/blob/master/Drivers/FullyKioskBrowserController.groovy
+// Support: https://community.hubitat.com/t/release-fully-kiosk-browser-controller/12223
+/*
+[Change Log]
+    1.24: Added setBooleanSetting,setStringSetting
+          Added lastActivity attribute
+    1.23: Updated speak() logging to escape XML in logging as speak command can support SSML XML
+    1.22: Updated HTTP calls so URL's are encoded properly
+    1.21: Fixed the import url to be correct
+    1.20: Change speak method to use Hubitat TTS methods. Set voice via Hubitat settings.
+    1.09: Changed volumeStream range to be 1-10 (0 doesn't work)
+          Made adjustements to setVolume to properly test for volumeStream value
+          Added playSound/stopSound commands.
+          Added the AudioVolume mute attributes.
+          Set default attributes when installed.
+*/
 
 metadata {
     definition (name: "Fully Kiosk Browser Controller", namespace: "GvnCampbell", author: "Gavin Campbell", importUrl: "https://raw.githubusercontent.com/GvnCampbell/Hubitat/master/Drivers/FullyKioskBrowserController.groovy") {
@@ -8,6 +24,7 @@ metadata {
 		capability "Refresh"
 		capability "SpeechSynthesis"
 		capability "Tone"
+        attribute "lastActivity","number"
 		command "bringFullyToFront"
 		command "launchAppPackage",["String"]
 		command "loadStartURL"
@@ -20,6 +37,10 @@ metadata {
 		command "stopScreensaver"
 		command "stopSound"
 		command "triggerMotion"
+        command "setBooleanSetting",[[name:"Key*",type:"STRING",description:"The key value associated with the setting to be updated."],
+                                     [name:"Value*:",type:"ENUM",constraints:["true","false"],desciption:"The setting to be applied."]]
+        command "setStringSetting",[[name:"Key*",type:"STRING",description:"The key value associated with the setting to be updated."],
+                                     [name:"Value*:",type:"STRING",desciption:"The setting to be applied."]]
     }
 	preferences {
 		input(name:"serverIP",type:"string",title:"Server IP Address",defaultValue:"",required:true)
@@ -112,7 +133,7 @@ def loadStartURL() {
 }
 def speak(text) {
 	def logprefix = "[speak] "
-	logger(logprefix+"text:${text}","trace")
+	logger(logprefix+"text:${groovy.xml.XmlUtil.escapeXml(text)}","trace")
 	def sound = textToSpeech(text)
 	logger(logprefix+"sound.uri: ${sound.uri}")
 	logger(logprefix+"sound.duration: ${sound.duration}")
@@ -234,6 +255,16 @@ def stopSound() {
     logger(logprefix,"trace")
 	sendCommandPost("cmd=stopSound")
 }
+def setBooleanSetting(key,value) {
+	def logprefix = "[setBooleanSetting] "
+    logger(logprefix+"key,value: ${key},${value}","trace")
+    sendCommandPost("cmd=setBooleanSetting&key=${key}&value=${value}")
+}
+def setStringSetting(key,value) {
+	def logprefix = "[setBooleanSetting] "
+    logger(logprefix+"key,value: ${key},${value}","trace")
+    sendCommandPost("cmd=setBooleanSetting&key=${key}&value=${java.net.URLEncoder.encode(value,"UTF-8")}")
+}
 
 // *** [ Communication Methods ] **********************************************
 def sendCommandPost(cmdDetails="") {
@@ -250,13 +281,12 @@ def sendCommandPost(cmdDetails="") {
 def sendCommandCallback(response, data) {
 	def logprefix = "[sendCommandCallback] "
     logger(logprefix+"response.status: ${response.status}","trace")
+    sendEvent([name:"lastActivity",value:now()])
 	if (response?.status == 200) {
 		logger(logprefix+"response.data: ${response.data}")
-		def jsonData = parseJson(response.data)
-		if (jsonData?.ip4 || jsonData?.status == "OK") {
-			logger(logprefix+"Updating last activity.")
-			sendEvent([name:"refresh"])
-		}
+		//def jsonData = parseJson(response.data)
+		//if (jsonData?.ip4 || jsonData?.status == "OK") {
+		//}
 	}
 }
 
