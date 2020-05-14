@@ -1,8 +1,28 @@
-// Fully Kiosk Browser Driver 1.24
+// Fully Kiosk Browser Driver 1.35
 // Github: https://github.com/GvnCampbell/Hubitat/blob/master/Drivers/FullyKioskBrowserController.groovy
 // Support: https://community.hubitat.com/t/release-fully-kiosk-browser-controller/12223
 /*
 [Change Log]
+    1.35: Added 'Battery' capability to track the ... battery.
+        : Added 'Switch' and 'SwitchLevel capabilities to turn the screen on/off and adjust the brightness
+        : Added 'AccelerationSensor' capability which triggers when tablet is moved.
+        : Added 'updateDeviceData' method to record device settings when the preferences is saved.
+        : Added 'HealthCheck' capability. Mainly used to help increment Last Activity when device is responding.
+        : Removed lastActivity custom attribute. Reduces event log noise.
+    1.33: Added 'MotionSensor' capability to monitor motion via the tablet camera.
+        : deviceNetworkId will now be set to the MAC of the IP Address to handle callbacks from FKB
+        : Fixed setStringSetting method
+        : Added 'Configure' capability.
+          When you select configure it will configure FKB on the device to send events back to this driver.
+          Configure should be run when making configuration changes.
+          WARNING: selecting this will overwrite any custom javascript code you currently have setup in fully.
+    1.32: If using the FKB TTS Engine, starting text with "!" will cause all messages to be stopped and the new message
+          to play. Otherwise the message is added to the queue and will play when others are finished. (Requires FKB v1.38+)
+        : Sending a "!" TTS message will stop all currently playing messages to stop. (Requires FKB v1.38+)
+    1.31: Updated to use "{ }" instead of "< />" for SSML tags.
+    1.30: Added option to select the TTS engine used.
+            Hubitat (Amazon): https://docs.aws.amazon.com/polly/latest/dg/supportedtags.html
+            Fully Kiosk Browser (Google): https://cloud.google.com/text-to-speech/docs/ssml
     1.24: Added setBooleanSetting,setStringSetting
           Added lastActivity attribute
     1.23: Updated speak() logging to escape XML in logging as speak command can support SSML XML
@@ -24,7 +44,14 @@ metadata {
 		capability "Refresh"
 		capability "SpeechSynthesis"
 		capability "Tone"
-        attribute "lastActivity","number"
+        capability "Battery"
+        capability "Switch"
+        capability "SwitchLevel"
+        capability "MotionSensor"
+        capability "Configuration"
+        capability "AccelerationSensor"
+        capability "HealthCheck"
+
 		command "bringFullyToFront"
 		command "launchAppPackage",["String"]
 		command "loadStartURL"
@@ -51,7 +78,9 @@ metadata {
 		input(name:"sirenVolume",type:"integer",title:"Siren Volume (0-100)",range:[0..100],defaultValue:"100",required:false)
 		input(name:"volumeStream",type:"enum",title:"Volume Stream",
 			  options:["1":"System","2":"Ring","3":"Music","4":"Alarm","5":"Notification","6":"Bluetooth","7":"System Enforced","8":"DTMF","9":"TTS","10":"Accessibility"],
-			  defaultValue:["3"],required:true,multiple:false) // when supported by HE we will set multiple to true
+			  defaultValue:"1",required:true,multiple:false)
+        input(name:"ttsEngine",type:"enum",title:"TTS Engine",description:"Select the TTS engine that is used.",options:[0:"Hubitat",1:"Fully Kiosk Browser"],defaultValue:0,required:true)
+        input(name:"motionTimeout",type:"number",title:"Motion/Acceleration Timeout",description:"Number of seconds before motion/acceleration is reset to inactive.",defaultValue:30,required:true)
 		input(name:"loggingLevel",type:"enum",title:"Logging Level",description:"Set the level of logging.",options:["none","debug","trace","info","warn","error"],defaultValue:"debug",required:true)
     }
 }
@@ -59,23 +88,134 @@ metadata {
 // *** [ Initialization Methods ] *********************************************
 def installed() {
 	def logprefix = "[installed] "
-    logger(logprefix,"trace!")
-	sendEvent([name:"mute",value:"unmuted"])
-	sendEvent([name:"alarm",value:"off"])
-	sendEvent([name:"volume",value:100])
+    logger(logprefix,"trace")
     initialize()
 }
 def updated() {
 	def logprefix = "[updated] "
-	logger(logprefix,"trace!")
+	logger(logprefix,"trace")
 	initialize()
 }
 def initialize() {
 	def logprefix = "[initialize] "
-    logger(logprefix,"trace!")
+    logger(logprefix,"trace")
+
+    def mac = getMACFromIP("${serverIP}")
+    if (mac) {
+        logger(logprefix+"MAC address found. Updating deviceNetworkId: ${mac}","info")
+        device.deviceNetworkId = mac
+    } else {
+        logger(logprefix+"MAC address not found. Setting deviceNetworkId to ip address: ${settings.serverIP}","info")
+        device.deviceNetworkId = settings.serverIP
+    }
+
+    updateDeviceData()
+}
+def configure() {
+	def logprefix = "[configure] "
+    logger(logprefix,"trace")
+    setBooleanSetting("websiteIntegration",true)
+    setStringSetting("injectJsCode","""
+function sendAttributeValue(attribute,value) {
+    var xhr = new XMLHttpRequest();
+	xhr.open("POST","http://${location.hub.localIP}:39501",true);
+	let httpData = {};
+	if (attribute=='volume') {
+		httpData = {attribute:attribute,value:fully.getAudioVolume(value)};
+	} else if (attribute=='battery') {
+		httpData = {attribute:attribute,value:fully.getBatteryLevel()};
+	} else {
+		httpData = {attribute:attribute,value:value};
+	};
+	xhr.send(JSON.stringify(httpData));
+};
+fully.bind("onMotion","sendAttributeValue('motion','active');");
+fully.bind("onMovement","sendAttributeValue('acceleration','active');");
+fully.bind("volumeUp","sendAttributeValue('volume',${settings.volumeStream});");
+fully.bind("volumeDown","sendAttributeValue('volume',${settings.volumeStream});");
+fully.bind("screenOn","sendAttributeValue('switch','on');");
+fully.bind("screenOff","sendAttributeValue('switch','off');");
+fully.bind("onBatteryLevelChanged","sendAttributeValue('battery','');");
+""")
+    setBooleanSetting("motionDetection",true)
+    setBooleanSetting("movementDetection",true)
+    loadStartURL()
+}
+
+// *** [ Parsing Methods ] ****************************************************
+def parse(description) {
+    def logprefix = "[parse] "
+    logger(logprefix+"description: ${description}","trace")
+    def msg = parseLanMessage(description)
+    def body = msg.body
+    body = parseJson(body)
+    logger(logprefix+"body: ${body}","trace")
+    switch (body.attribute) {
+        case "switch":
+            sendEvent([name:"switch",value:body.value])
+            break
+        case "battery":
+            sendEvent([name:"battery",value:body.value])
+            break
+        case "motion":
+            motion(body.value)
+            break
+        case "acceleration":
+            acceleration(body.value)
+            break
+        case "volume":
+            sendEvent([name:"volume",value:body.value])
+            break
+        default:
+            sendEvent([name:"checkInterval",value:60])
+            logger(logprefix+"Unknown attribute: ${body.attribute}","error")
+            break
+    }
+}
+def motion(value) {
+    def logprefix = "[motion] "
+    logger(logprefix+"value: ${value}","trace")
+    sendEvent([name:"motion",value:value])
+    if (value=="active") {
+        runIn(settings.motionTimeout,"motion",[data:"inactive"])
+    } else {
+        unschedule("motion")
+    }
+}
+def acceleration(value) {
+    def logprefix = "[acceleration] "
+    logger(logprefix+"value: ${value}","trace")
+    sendEvent([name:"acceleration",value:value])
+    if (value=="active") {
+        runIn(settings.motionTimeout,"acceleration",[data:"inactive"])
+    } else {
+        unschedule("acceleration")
+    }
 }
 
 // *** [ Device Methods ] *****************************************************
+def on() {
+	def logprefix = "[on] "
+	logger(logprefix,"trace")
+    screenOn()
+}
+def off() {
+	def logprefix = "[off] "
+	logger(logprefix+"state.siren:${state.siren}")
+	if (state.siren) {
+		setVolume(state.siren)
+	}
+	state.remove("siren")
+	sendEvent([name:"alarm",value:"off"])
+	sendCommandPost("cmd=stopSound")
+    screenOff()
+}
+def setLevel(level) {
+    def logprefix = "[setLevel] "
+    logger(logprefix,"trace")
+    setScreenBrightness(level)
+    sendEvent([name:"level",value:level])
+}
 def beep() {
 	def logprefix = "[beep] "
     logger(logprefix,"trace")
@@ -134,10 +274,41 @@ def loadStartURL() {
 def speak(text) {
 	def logprefix = "[speak] "
 	logger(logprefix+"text:${groovy.xml.XmlUtil.escapeXml(text)}","trace")
-	def sound = textToSpeech(text)
-	logger(logprefix+"sound.uri: ${sound.uri}")
-	logger(logprefix+"sound.duration: ${sound.duration}")
-	playSound(sound.uri)
+    logger(logprefix+"settings.ttsEngine: ${settings.ttsEngine}","debug")
+    text = text.replace("{","<").replace("}","/>")
+    switch ("${settings.ttsEngine}") {
+        case "null":
+        case "0":
+            if (text=="!") {
+                stopSound()
+            } else {
+                logger(logprefix+"Using the Hubitat TTS Engine.","info")
+                logger(logprefix+"Updated text:${groovy.xml.XmlUtil.escapeXml(text)}","trace")
+                if (text.startsWith("!")) {
+                    text = text.substring(1)
+                }
+                def sound = textToSpeech(text)
+                logger(logprefix+"sound.uri: ${sound.uri}","debug")
+                logger(logprefix+"sound.duration: ${sound.duration}","debug")
+                playSound(sound.uri)
+            }
+           break
+        case "1":
+            if (text=="!") {
+                sendCommandPost("cmd=stopTextToSpeech")
+            } else {
+                logger(logprefix+"Using the Fully Kiosk Browser TTS Engine.","info")
+                def queue = text.startsWith("!")?"0":"1"
+                if (text.startsWith("!")) {
+                    text = text.substring(1)
+                }
+                logger(logprefix+"Updated text:${groovy.xml.XmlUtil.escapeXml(text)}","trace")
+                sendCommandPost("cmd=textToSpeech&text=${java.net.URLEncoder.encode(text, "UTF-8")}&queue=${queue}")
+            }
+            break
+        default:
+            break
+    }
 }
 def setVolume(volumeLevel) {
 	def logprefix = "[setVolume] "
@@ -145,6 +316,7 @@ def setVolume(volumeLevel) {
 	logger(logprefix+"volumeStream:${volumeStream}")
 	def vl = volumeLevel.toInteger()
 	def vs = volumeStream.toInteger()
+
 	if (vl >= 0 && vl <= 100 && vs >= 1 && vs <= 10) {
 		sendCommandPost("cmd=setAudioVolume&level=${vl}&stream=${vs}")
 		sendEvent([name:"volume",value:vl])
@@ -204,6 +376,11 @@ def refresh() {
   	logger logprefix
 	sendCommandPost("cmd=deviceInfo")
 }
+def ping() {
+  	def logprefix = "[ping] "
+  	logger logprefix
+    refresh()
+}
 def both() {
 	def logprefix = "[both] "
 	logger(logprefix)
@@ -235,16 +412,6 @@ def sirenStart(eventValue) {
 		logger(logprefix+"sirenFile,sirenVolume or eventValue not set.")
 	}
 }
-def off() {
-	def logprefix = "[off] "
-	logger(logprefix+"state.siren:${state.siren}")
-	if (state.siren) {
-		setVolume(state.siren)
-	}
-	state.remove("siren")
-	sendEvent([name:"alarm",value:"off"])
-	sendCommandPost("cmd=stopSound")
-}
 def playSound(soundFile) {
 	def logprefix = "[playSound] "
 	logger(logprefix+"soundFile:${soundFile}","trace")
@@ -261,9 +428,32 @@ def setBooleanSetting(key,value) {
     sendCommandPost("cmd=setBooleanSetting&key=${key}&value=${value}")
 }
 def setStringSetting(key,value) {
-	def logprefix = "[setBooleanSetting] "
+	def logprefix = "[setStringSetting] "
     logger(logprefix+"key,value: ${key},${value}","trace")
-    sendCommandPost("cmd=setBooleanSetting&key=${key}&value=${java.net.URLEncoder.encode(value,"UTF-8")}")
+    sendCommandPost("cmd=setStringSetting&key=${key}&value=${java.net.URLEncoder.encode(value,"UTF-8")}")
+}
+def updateDeviceData() {
+	def logprefix = "[updateDeviceData] "
+    logger(logprefix,"trace")
+    def httpParams = [
+        uri:"http://${serverIP}:${serverPort}/?type=json&password=${serverPassword}&cmd=deviceInfo",
+        contentType: "application/json"
+    ]
+    asynchttpGet("updateDeviceDataCallback",httpParams)
+}
+def updateDeviceDataCallback(response,data) {
+	def logprefix = "[updateDeviceDataCallback] "
+    logger(logprefix+"response status,data: ${response.status},${data}","trace")
+    if (response.status==200) {
+        logger(logprefix+"response.json: ${response.json}","debug")
+        device.updateDataValue("appVersionName",response.json.appVersionName)
+        device.updateDataValue("deviceManufacturer",response.json.deviceManufacturer)
+        device.updateDataValue("androidVersion",response.json.androidVersion)
+        device.updateDataValue("deviceModel",response.json.deviceModel)
+        sendEvent([name:"checkInterval",value:60])
+    } else {
+        logger(logprefix+"Invalid response: ${response.status}","error")
+    }
 }
 
 // *** [ Communication Methods ] **********************************************
@@ -281,21 +471,16 @@ def sendCommandPost(cmdDetails="") {
 def sendCommandCallback(response, data) {
 	def logprefix = "[sendCommandCallback] "
     logger(logprefix+"response.status: ${response.status}","trace")
-    sendEvent([name:"lastActivity",value:now()])
 	if (response?.status == 200) {
-		logger(logprefix+"response.data: ${response.data}")
-		//def jsonData = parseJson(response.data)
-		//if (jsonData?.ip4 || jsonData?.status == "OK") {
-		//}
-	}
+		logger(logprefix+"response.data: ${response.data}","debug")
+        sendEvent([name:"checkInterval",value:60])
+    } else {
+        logger(logprefix+"Invalid response: ${response.status}","error")
+    }
 }
 
 // *** [ Logger ] *************************************************************
 private logger(loggingText,loggingType="debug") {
-	def internalLogging = false
-	def internalLoggingSize = 500
-	if (internalLogging) { if (!state.logger) {	state.logger = [] }	} else { state.logger = [] }
-
 	loggingType = loggingType.toLowerCase()
 	def forceLog = false
 	if (loggingType.endsWith("!")) {
@@ -313,9 +498,5 @@ private logger(loggingText,loggingType="debug") {
 	} else { loggingText = null }
 	if (loggingText) {
 		log."${loggingType}" loggingText
-		if (internalLogging) {
-			if (state.logger.size() >= internalLoggingSize) { state.logger.pop() }
-			state.logger.push("<b>log.${loggingType}:</b>\t${loggingText}")
-		}
 	}
 }
