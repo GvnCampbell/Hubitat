@@ -1,8 +1,9 @@
-// Fully Kiosk Browser Driver 1.35
+// Fully Kiosk Browser Driver 1.36
 // Github: https://github.com/GvnCampbell/Hubitat/blob/master/Drivers/FullyKioskBrowserController.groovy
 // Support: https://community.hubitat.com/t/release-fully-kiosk-browser-controller/12223
 /*
 [Change Log]
+    1.36: Added 'restartApp' command.
     1.35: Added 'Battery' capability to track the ... battery.
         : Added 'Switch' and 'SwitchLevel capabilities to turn the screen on/off and adjust the brightness
         : Added 'AccelerationSensor' capability which triggers when tablet is moved.
@@ -57,6 +58,7 @@ metadata {
 		command "loadStartURL"
 		command "loadURL",["String"]
 		command "playSound",["String"]
+        command "restartApp"
 		command "screenOn"
 		command "screenOff"
 		command "setScreenBrightness",["Number"]
@@ -230,6 +232,11 @@ def bringFullyToFront() {
 	def logprefix = "[bringFullyToFront] "
     logger(logprefix,"trace")
 	sendCommandPost("cmd=toForeground")
+}
+def restartApp() {
+	def logprefix = "[restartApp] "
+    logger(logprefix,"trace")
+	sendCommandPost("cmd=restartApp")
 }
 def screenOn() {
 	def logprefix = "[screenOn] "
