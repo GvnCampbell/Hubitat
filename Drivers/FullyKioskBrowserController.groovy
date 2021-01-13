@@ -1,9 +1,15 @@
-// Fully Kiosk Browser Driver 1.36
+// Fully Kiosk Browser Driver 1.39
 // Github: https://github.com/GvnCampbell/Hubitat/blob/master/Drivers/FullyKioskBrowserController.groovy
 // Support: https://community.hubitat.com/t/release-fully-kiosk-browser-controller/12223
 /*
 [Change Log]
-    1.36: Added 'restartApp' command.
+    1.39: Added attribute "currentPageUrl"
+            This attribute is updated with the current page during polling (every minute).
+    1.38: Fixed switch reporting.
+    1.37: Added State Polling option to allow the driver to poll the device for updates instead of the device reporting in.
+            This solves the issue where the start page is SSL. Reporting will not work back to a non SSL endpoint.
+            This will gather the screen brightness,screen state and battery levels only.  Motion will not work.
+    1.36: Added 'restartApp' command. (Thanks tmleafs)
     1.35: Added 'Battery' capability to track the ... battery.
         : Added 'Switch' and 'SwitchLevel capabilities to turn the screen on/off and adjust the brightness
         : Added 'AccelerationSensor' capability which triggers when tablet is moved.
@@ -13,7 +19,7 @@
     1.33: Added 'MotionSensor' capability to monitor motion via the tablet camera.
         : deviceNetworkId will now be set to the MAC of the IP Address to handle callbacks from FKB
         : Fixed setStringSetting method
-        : Added 'Configure' capability.
+        : Added 'Configure' capability.  
           When you select configure it will configure FKB on the device to send events back to this driver.
           Configure should be run when making configuration changes.
           WARNING: selecting this will overwrite any custom javascript code you currently have setup in fully.
@@ -52,13 +58,15 @@ metadata {
         capability "Configuration"
         capability "AccelerationSensor"
         capability "HealthCheck"
-
+        
+        attribute "currentPageUrl","String"
+        
 		command "bringFullyToFront"
 		command "launchAppPackage",["String"]
 		command "loadStartURL"
 		command "loadURL",["String"]
 		command "playSound",["String"]
-        command "restartApp"
+        	command "restartApp"
 		command "screenOn"
 		command "screenOff"
 		command "setScreenBrightness",["Number"]
@@ -83,6 +91,7 @@ metadata {
 			  defaultValue:"1",required:true,multiple:false)
         input(name:"ttsEngine",type:"enum",title:"TTS Engine",description:"Select the TTS engine that is used.",options:[0:"Hubitat",1:"Fully Kiosk Browser"],defaultValue:0,required:true)
         input(name:"motionTimeout",type:"number",title:"Motion/Acceleration Timeout",description:"Number of seconds before motion/acceleration is reset to inactive.",defaultValue:30,required:true)
+        input(name:"statePolling",type:"bool",title:"State Polling",description:"Enable this option to force polling of the device to get battery, screen brightness and screen states.",defaultValue:false,required:true)
 		input(name:"loggingLevel",type:"enum",title:"Logging Level",description:"Set the level of logging.",options:["none","debug","trace","info","warn","error"],defaultValue:"debug",required:true)
     }
 }
@@ -102,6 +111,8 @@ def initialize() {
 	def logprefix = "[initialize] "
     logger(logprefix,"trace")
 
+    unschedule()
+    
     def mac = getMACFromIP("${serverIP}")
     if (mac) {
         logger(logprefix+"MAC address found. Updating deviceNetworkId: ${mac}","info")
@@ -110,7 +121,12 @@ def initialize() {
         logger(logprefix+"MAC address not found. Setting deviceNetworkId to ip address: ${settings.serverIP}","info")
         device.deviceNetworkId = settings.serverIP
     }
-
+    
+    
+    if (settings.statePolling) {
+        runEvery1Minute("refresh")
+    }
+    
     updateDeviceData()
 }
 def configure() {
@@ -138,7 +154,7 @@ fully.bind("volumeDown","sendAttributeValue('volume',${settings.volumeStream});"
 fully.bind("screenOn","sendAttributeValue('switch','on');");
 fully.bind("screenOff","sendAttributeValue('switch','off');");
 fully.bind("onBatteryLevelChanged","sendAttributeValue('battery','');");
-""")
+""")                  
     setBooleanSetting("motionDetection",true)
     setBooleanSetting("movementDetection",true)
     loadStartURL()
@@ -147,11 +163,11 @@ fully.bind("onBatteryLevelChanged","sendAttributeValue('battery','');");
 // *** [ Parsing Methods ] ****************************************************
 def parse(description) {
     def logprefix = "[parse] "
-    logger(logprefix+"description: ${description}","trace")
+    logger(logprefix+"description: ${description}","trace")	   
     def msg = parseLanMessage(description)
     def body = msg.body
     body = parseJson(body)
-    logger(logprefix+"body: ${body}","trace")
+    logger(logprefix+"body: ${body}","trace")	
     switch (body.attribute) {
         case "switch":
             sendEvent([name:"switch",value:body.value])
@@ -176,7 +192,7 @@ def parse(description) {
 }
 def motion(value) {
     def logprefix = "[motion] "
-    logger(logprefix+"value: ${value}","trace")
+    logger(logprefix+"value: ${value}","trace")	   
     sendEvent([name:"motion",value:value])
     if (value=="active") {
         runIn(settings.motionTimeout,"motion",[data:"inactive"])
@@ -186,7 +202,7 @@ def motion(value) {
 }
 def acceleration(value) {
     def logprefix = "[acceleration] "
-    logger(logprefix+"value: ${value}","trace")
+    logger(logprefix+"value: ${value}","trace")	   
     sendEvent([name:"acceleration",value:value])
     if (value=="active") {
         runIn(settings.motionTimeout,"acceleration",[data:"inactive"])
@@ -280,7 +296,7 @@ def loadStartURL() {
 }
 def speak(text) {
 	def logprefix = "[speak] "
-	logger(logprefix+"text:${groovy.xml.XmlUtil.escapeXml(text)}","trace")
+	logger(logprefix+"text:${groovy.xml.XmlUtil.escapeXml(text)}","trace")	
     logger(logprefix+"settings.ttsEngine: ${settings.ttsEngine}","debug")
     text = text.replace("{","<").replace("}","/>")
     switch ("${settings.ttsEngine}") {
@@ -290,7 +306,7 @@ def speak(text) {
                 stopSound()
             } else {
                 logger(logprefix+"Using the Hubitat TTS Engine.","info")
-                logger(logprefix+"Updated text:${groovy.xml.XmlUtil.escapeXml(text)}","trace")
+                logger(logprefix+"Updated text:${groovy.xml.XmlUtil.escapeXml(text)}","trace")	
                 if (text.startsWith("!")) {
                     text = text.substring(1)
                 }
@@ -309,12 +325,12 @@ def speak(text) {
                 if (text.startsWith("!")) {
                     text = text.substring(1)
                 }
-                logger(logprefix+"Updated text:${groovy.xml.XmlUtil.escapeXml(text)}","trace")
+                logger(logprefix+"Updated text:${groovy.xml.XmlUtil.escapeXml(text)}","trace")	
                 sendCommandPost("cmd=textToSpeech&text=${java.net.URLEncoder.encode(text, "UTF-8")}&queue=${queue}")
             }
             break
         default:
-            break
+            break    
     }
 }
 def setVolume(volumeLevel) {
@@ -323,7 +339,7 @@ def setVolume(volumeLevel) {
 	logger(logprefix+"volumeStream:${volumeStream}")
 	def vl = volumeLevel.toInteger()
 	def vs = volumeStream.toInteger()
-
+    
 	if (vl >= 0 && vl <= 100 && vs >= 1 && vs <= 10) {
 		sendCommandPost("cmd=setAudioVolume&level=${vl}&stream=${vs}")
 		sendEvent([name:"volume",value:vl])
@@ -381,7 +397,27 @@ def unmute() {
 def refresh() {
   	def logprefix = "[refresh] "
   	logger logprefix
-	sendCommandPost("cmd=deviceInfo")
+    def postParams = [
+        uri: "http://${serverIP}:${serverPort}/?type=json&password=${serverPassword}&cmd=deviceInfo",
+        requestContentType: 'application/json',
+        contentType: 'application/json'
+    ]
+    logger(logprefix+postParams)
+    asynchttpPost("refreshCallback", postParams, null)
+
+}
+def refreshCallback(response,data) {
+	def logprefix = "[refreshCallback] "
+    logger(logprefix+"response.status: ${response.status}","trace")
+	if (response?.status == 200) {
+		logger(logprefix+"response.json: ${response.json}","debug")
+        sendEvent([name:"battery",value:response.json.batteryLevel])
+        sendEvent([name:"switch",value:(response.json.screenOn==true)?"on":"off"])     
+        sendEvent([name:"level",value:response.json.screenBrightness])
+        sendEvent([name:"currentPageUrl",value:response.json.currentPage])
+    } else {
+        logger(logprefix+"Invalid response: ${response.status}","error")
+    }
 }
 def ping() {
   	def logprefix = "[ping] "
