@@ -1,0 +1,12 @@
+{
+  "author": "Gavin Campbell",
+  "gitHubUrl": "https://github.com/GvnCampbell/",
+  "packages": [
+    {
+      "name": "Fully Kiosk Browser Controller",
+      "category": "Control",
+      "location": "https://raw.githubusercontent.com/GvnCampbell/Hubitat/master/packageManifest-fullykioskbrowsercontroller.json",
+      "description": "Driver to control Fully Kiosk Browser."
+    }
+  ]
+}
