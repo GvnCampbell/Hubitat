@@ -1,8 +1,12 @@
-// Fully Kiosk Browser Driver 1.39
+// Fully Kiosk Browser Driver 1.40
 // Github: https://github.com/GvnCampbell/Hubitat/blob/master/Drivers/FullyKioskBrowserController.groovy
 // Support: https://community.hubitat.com/t/release-fully-kiosk-browser-controller/12223
 /*
 [Change Log]
+    1.40: Requires Fully Kiosk Browser 1.43.1 or newer.
+        : Added auto configuration of webviewMixedContent
+            This allows FKB to report in device status to HE from dashboards that use https.
+            After upgrading click configure so all the settings get applied.
     1.39: Added attribute "currentPageUrl"
             This attribute is updated with the current page during polling (every minute).
     1.38: Fixed switch reporting.
@@ -133,6 +137,7 @@ def configure() {
 	def logprefix = "[configure] "
     logger(logprefix,"trace")
     setBooleanSetting("websiteIntegration",true)
+    setStringSetting("webviewMixedContent","0")
     setStringSetting("injectJsCode","""
 function sendAttributeValue(attribute,value) {
     var xhr = new XMLHttpRequest();
