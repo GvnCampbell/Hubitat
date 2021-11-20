@@ -1,8 +1,11 @@
-// Fully Kiosk Browser Driver 1.40
+// Fully Kiosk Browser Driver 1.41
 // Github: https://github.com/GvnCampbell/Hubitat/blob/master/Drivers/FullyKioskBrowserController.groovy
 // Support: https://community.hubitat.com/t/release-fully-kiosk-browser-controller/12223
 /*
 [Change Log]
+    1.41: Fixed speak command.  Was broken with Hubitat firmware 2.9.0.
+            This will allow it to work with RM and not give an error.  
+	    Volume will be set if specified (optional), and voice is passed to the engine (optional) 
     1.40: Requires Fully Kiosk Browser 1.43.1 or newer.
         : Added auto configuration of webviewMixedContent
             This allows FKB to report in device status to HE from dashboards that use https.
@@ -299,9 +302,9 @@ def loadStartURL() {
 	logger(logprefix,"trace")
 	sendCommandPost("cmd=loadStartURL")
 }
-def speak(text) {
+def speak(text, volume=-1, voice="") {
 	def logprefix = "[speak] "
-	logger(logprefix+"text:${groovy.xml.XmlUtil.escapeXml(text)}","trace")	
+    logger(logprefix+"text,volume,voice:${groovy.xml.XmlUtil.escapeXml(text)},${volume},${voice}","trace")	
     logger(logprefix+"settings.ttsEngine: ${settings.ttsEngine}","debug")
     text = text.replace("{","<").replace("}","/>")
     switch ("${settings.ttsEngine}") {
@@ -315,9 +318,10 @@ def speak(text) {
                 if (text.startsWith("!")) {
                     text = text.substring(1)
                 }
-                def sound = textToSpeech(text)
+                def sound = textToSpeech(text, voice)
                 logger(logprefix+"sound.uri: ${sound.uri}","debug")
                 logger(logprefix+"sound.duration: ${sound.duration}","debug")
+                setVolume(volume)
                 playSound(sound.uri)
             }
            break
@@ -331,7 +335,7 @@ def speak(text) {
                     text = text.substring(1)
                 }
                 logger(logprefix+"Updated text:${groovy.xml.XmlUtil.escapeXml(text)}","trace")	
-                sendCommandPost("cmd=textToSpeech&text=${java.net.URLEncoder.encode(text, "UTF-8")}&queue=${queue}")
+                sendCommandPost("cmd=textToSpeech&text=${java.net.URLEncoder.encode(text, "UTF-8")}&queue=${queue}&engine=${java.net.URLEncoder.encode(voice, "UTF-8")}")
             }
             break
         default:
